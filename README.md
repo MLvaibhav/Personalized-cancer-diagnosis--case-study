@@ -857,5 +857,202 @@ For values of best alpha =  0.001 The cross validation log loss is: 1.7158276047
 
 For values of best alpha =  0.001 The test log loss is: 1.7187358677410403
 
+Univariate Analysis on Text Feature
 
+How many unique words are present in train data?
+
+How are word frequencies distributed?
+
+How to featurize text field?
+
+Is the text feature useful in predicitng y_i?
+
+Is the text feature stable across train, test and CV datasets?
+
+```python
+# cls_text is a data frame
+# for every row in data fram consider the 'TEXT'
+# split the words by space
+# make a dict with those words
+# increment its count whenever we see that word , frequency of word in the TEXT
+
+def extract_dictionary_paddle(cls_text):
+    dictionary = defaultdict(int)
+    for index, row in cls_text.iterrows():
+        for word in row['TEXT'].split():
+            dictionary[word] +=1
+    return dictionary
+```
+
+One hot encoding on text feature
+
+```python
+# building a CountVectorizer with all the words that occured minimum 3 times in train data
+text_vectorizer = CountVectorizer(min_df=3)
+train_text_feature_onehotCoding = text_vectorizer.fit_transform(train_df['TEXT'])
+# getting all the feature names (words)
+train_text_features= text_vectorizer.get_feature_names()
+
+# train_text_feature_onehotCoding.sum(axis=0).A1 will sum every row and returns (1*number of features) vector
+train_text_fea_counts = train_text_feature_onehotCoding.sum(axis=0).A1
+
+# zip(list(text_features),text_fea_counts) will zip a word with its number of times it occured
+text_fea_dict = dict(zip(list(train_text_features),train_text_fea_counts))
+
+
+print("Total number of unique words in train data :", len(train_text_features))
+```
+
+Normalizing one hot encoded text feature
+
+```python
+# don't forget to normalize every feature
+train_text_feature_onehotCoding = normalize(train_text_feature_onehotCoding, axis=0)
+
+# we use the same vectorizer that was trained on train data
+test_text_feature_onehotCoding = text_vectorizer.transform(test_df['TEXT'])
+# don't forget to normalize every feature
+test_text_feature_onehotCoding = normalize(test_text_feature_onehotCoding, axis=0)
+
+# we use the same vectorizer that was trained on train data
+cv_text_feature_onehotCoding = text_vectorizer.transform(cv_df['TEXT'])
+# don't forget to normalize every feature
+cv_text_feature_onehotCoding = normalize(cv_text_feature_onehotCoding, axis=0)
+```
+
+Applying this featurealone to ML model to check its importance 
+
+```python
+# Train a Logistic regression+Calibration model using text features whicha re on-hot encoded
+alpha = [10 ** x for x in range(-5, 1)]
+
+# read more about SGDClassifier() at http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html
+# ------------------------------
+# default parameters
+# SGDClassifier(loss=’hinge’, penalty=’l2’, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=None, tol=None, 
+# shuffle=True, verbose=0, epsilon=0.1, n_jobs=1, random_state=None, learning_rate=’optimal’, eta0=0.0, power_t=0.5, 
+# class_weight=None, warm_start=False, average=False, n_iter=None)
+
+# some of methods
+# fit(X, y[, coef_init, intercept_init, …])	Fit linear model with Stochastic Gradient Descent.
+# predict(X)	Predict class labels for samples in X.
+
+#-------------------------------
+# video link: 
+#------------------------------
+
+
+cv_log_error_array=[]
+for i in alpha:
+    clf = SGDClassifier(alpha=i, penalty='l2', loss='log', random_state=42)
+    clf.fit(train_text_feature_onehotCoding, y_train)
+    
+    sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+    sig_clf.fit(train_text_feature_onehotCoding, y_train)
+    predict_y = sig_clf.predict_proba(cv_text_feature_onehotCoding)
+    cv_log_error_array.append(log_loss(y_cv, predict_y, labels=clf.classes_, eps=1e-15))
+    print('For values of alpha = ', i, "The log loss is:",log_loss(y_cv, predict_y, labels=clf.classes_, eps=1e-15))
+
+fig, ax = plt.subplots()
+ax.plot(alpha, cv_log_error_array,c='g')
+for i, txt in enumerate(np.round(cv_log_error_array,3)):
+    ax.annotate((alpha[i],np.round(txt,3)), (alpha[i],cv_log_error_array[i]))
+plt.grid()
+plt.title("Cross Validation Error for each alpha")
+plt.xlabel("Alpha i's")
+plt.ylabel("Error measure")
+plt.show()
+
+
+best_alpha = np.argmin(cv_log_error_array)
+clf = SGDClassifier(alpha=alpha[best_alpha], penalty='l2', loss='log', random_state=42)
+clf.fit(train_text_feature_onehotCoding, y_train)
+sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+sig_clf.fit(train_text_feature_onehotCoding, y_train)
+
+predict_y = sig_clf.predict_proba(train_text_feature_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The train log loss is:",log_loss(y_train, predict_y, labels=clf.classes_, eps=1e-15))
+predict_y = sig_clf.predict_proba(cv_text_feature_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The cross validation log loss is:",log_loss(y_cv, predict_y, labels=clf.classes_, eps=1e-15))
+predict_y = sig_clf.predict_proba(test_text_feature_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The test log loss is:",log_loss(y_test, predict_y, labels=clf.classes_, eps=1e-15))
+
+For values of alpha =  1e-05 The log loss is: 1.3738596392135043
+For values of alpha =  0.0001 The log loss is: 1.273680305017097
+For values of alpha =  0.001 The log loss is: 1.2920217348159087
+For values of alpha =  0.01 The log loss is: 1.3645689421684215
+For values of alpha =  0.1 The log loss is: 1.4248236908190466
+For values of alpha =  1 The log loss is: 1.6227331877306714
+```
+![Screen Shot 2021-10-23 at 12 02 15 AM](https://user-images.githubusercontent.com/90976062/138505632-cc7820a3-c8a3-4b64-9965-0d6ae4d44217.png)
+
+Now lets start applying all feature together to ML model nd get output 
+
+```python
+#Data preparation for ML models.
+# here we are mKING FUNCTION THAT WILL THREE VALUES 1. LOG LOSS 2 NO OF MISCLASSIFIED POINTS 3. CONFUSION-PRECISION-RECALL MATRIX by using function defined earlier in code
+#Misc. functionns for ML models
+
+
+def predict_and_plot_confusion_matrix(train_x, train_y,test_x, test_y, clf):
+    clf.fit(train_x, train_y)
+    sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+    sig_clf.fit(train_x, train_y)
+    pred_y = sig_clf.predict(test_x)
+
+    # for calculating log_loss we willl provide the array of probabilities belongs to each class
+    print("Log loss :",log_loss(test_y, sig_clf.predict_proba(test_x)))
+    # calculating the number of data points that are misclassified
+    print("Number of mis-classified points :", np.count_nonzero((pred_y- test_y))/test_y.shape[0])
+    plot_confusion_matrix(test_y, pred_y)
+```
+
+```python
+def report_log_loss(train_x, train_y, test_x, test_y,  clf):
+    clf.fit(train_x, train_y)
+    sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+    sig_clf.fit(train_x, train_y)
+    sig_clf_probs = sig_clf.predict_proba(test_x)
+    return log_loss(test_y, sig_clf_probs, eps=1e-15)
+```
+
+Stacking the three types of features
+
+```python
+# merging gene, variance and text features
+
+# building train, test and cross validation data sets
+# a = [[1, 2], 
+#      [3, 4]]
+# b = [[4, 5], 
+#      [6, 7]]
+# hstack(a, b) = [[1, 2, 4, 5],
+#                [ 3, 4, 6, 7]]
+
+train_gene_var_onehotCoding = hstack((train_gene_feature_onehotCoding,train_variation_feature_onehotCoding))
+test_gene_var_onehotCoding = hstack((test_gene_feature_onehotCoding,test_variation_feature_onehotCoding))
+cv_gene_var_onehotCoding = hstack((cv_gene_feature_onehotCoding,cv_variation_feature_onehotCoding))
+
+train_x_onehotCoding = hstack((train_gene_var_onehotCoding, train_text_feature_onehotCoding)).tocsr()
+train_y = np.array(list(train_df['Class']))
+
+test_x_onehotCoding = hstack((test_gene_var_onehotCoding, test_text_feature_onehotCoding)).tocsr()
+test_y = np.array(list(test_df['Class']))
+
+cv_x_onehotCoding = hstack((cv_gene_var_onehotCoding, cv_text_feature_onehotCoding)).tocsr()
+cv_y = np.array(list(cv_df['Class']))
+
+print("One hot encoding features :")
+print("(number of data points * number of features) in train data = ", train_x_onehotCoding.shape)
+print("(number of data points * number of features) in test data = ", test_x_onehotCoding.shape)
+print("(number of data points * number of features) in cross validation data =", cv_x_onehotCoding.shape)
+```
+
+One hot encoding features :
+
+(number of data points * number of features) in train data =  (2124, 55628)
+
+(number of data points * number of features) in test data =  (665, 55628)
+
+(number of data points * number of features) in cross validation data = (532, 55628)
 
