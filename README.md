@@ -1056,3 +1056,211 @@ One hot encoding features :
 
 (number of data points * number of features) in cross validation data = (532, 55628)
 
+We are going to apply few models on same dataset and will choose the one with least log loss and misclassified points
+
+First model : Naive Bayes model 
+
+Hyper parameter tuning
+
+```python
+alpha = [0.00001, 0.0001, 0.001, 0.1, 1, 10, 100,1000]
+cv_log_error_array = []
+for i in alpha:
+    print("for alpha =", i)
+    clf = MultinomialNB(alpha=i)
+    clf.fit(train_x_onehotCoding, train_y)
+    sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+    sig_clf.fit(train_x_onehotCoding, train_y)
+    sig_clf_probs = sig_clf.predict_proba(cv_x_onehotCoding)
+    cv_log_error_array.append(log_loss(cv_y, sig_clf_probs, labels=clf.classes_, eps=1e-15))
+    # to avoid rounding error while multiplying probabilites we use log-probability estimates
+    print("Log Loss :",log_loss(cv_y, sig_clf_probs)) 
+
+fig, ax = plt.subplots()
+ax.plot(np.log10(alpha), cv_log_error_array,c='g')
+for i, txt in enumerate(np.round(cv_log_error_array,3)):
+    ax.annotate((alpha[i],str(txt)), (np.log10(alpha[i]),cv_log_error_array[i]))
+plt.grid()
+plt.xticks(np.log10(alpha))
+plt.title("Cross Validation Error for each alpha")
+plt.xlabel("Alpha i's")
+plt.ylabel("Error measure")
+plt.show()
+
+
+best_alpha = np.argmin(cv_log_error_array)
+clf = MultinomialNB(alpha=alpha[best_alpha])
+clf.fit(train_x_onehotCoding, train_y)
+sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+sig_clf.fit(train_x_onehotCoding, train_y)
+
+
+predict_y = sig_clf.predict_proba(train_x_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The train log loss is:",log_loss(y_train, predict_y, labels=clf.classes_, eps=1e-15))
+predict_y = sig_clf.predict_proba(cv_x_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The cross validation log loss is:",log_loss(y_cv, predict_y, labels=clf.classes_, eps=1e-15))
+predict_y = sig_clf.predict_proba(test_x_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The test log loss is:",log_loss(y_test, predict_y, labels=clf.classes_, eps=1e-15))
+
+for alpha = 1e-05
+Log Loss : 1.2646439651522057
+for alpha = 0.0001
+Log Loss : 1.259500674179686
+for alpha = 0.001
+Log Loss : 1.2536308925197173
+for alpha = 0.1
+Log Loss : 1.2610616588333696
+for alpha = 1
+Log Loss : 1.2530758772541584
+for alpha = 10
+Log Loss : 1.383677258933573
+for alpha = 100
+Log Loss : 1.3354465228516252
+for alpha = 1000
+Log Loss : 1.2929132936629668
+```
+
+![Screen Shot 2021-10-23 at 7 11 47 PM](https://user-images.githubusercontent.com/90976062/138558901-989c852c-61fd-4508-b2c7-f3675d462572.png)
+
+Testing the model with best hyper paramters
+
+```python
+clf = MultinomialNB(alpha=alpha[best_alpha])
+clf.fit(train_x_onehotCoding, train_y)
+sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+sig_clf.fit(train_x_onehotCoding, train_y)
+sig_clf_probs = sig_clf.predict_proba(cv_x_onehotCoding)
+# to avoid rounding error while multiplying probabilites we use log-probability estimates
+print("Log Loss :",log_loss(cv_y, sig_clf_probs))
+print("Number of missclassified point :", np.count_nonzero((sig_clf.predict(cv_x_onehotCoding)- cv_y))/cv_y.shape[0])
+plot_confusion_matrix(cv_y, sig_clf.predict(cv_x_onehotCoding.toarray()))
+```
+![Screen Shot 2021-10-23 at 7 14 21 PM](https://user-images.githubusercontent.com/90976062/138559052-47bfbdbb-f89e-4678-91a4-a646d177227d.png)
+
+![Screen Shot 2021-10-23 at 7 16 28 PM](https://user-images.githubusercontent.com/90976062/138559140-b8416cd8-6cf1-4bbc-b469-f4577bd5e5b2.png)
+
+![Screen Shot 2021-10-23 at 7 18 01 PM](https://user-images.githubusercontent.com/90976062/138559204-a487caa9-5319-482d-9882-969fd3c96131.png)
+
+
+Now lets test our model to get predicted output using test data 
+
+```python
+test_point_index = 1
+no_feature = 100
+predicted_cls = sig_clf.predict(test_x_onehotCoding[test_point_index])
+print("Predicted Class :", predicted_cls)
+print("Predicted Class Probabilities:", np.round(sig_clf.predict_proba(test_x_onehotCoding[test_point_index]),4))
+print("Actual Class :", test_y[test_point_index])
+indices=np.argsort(-1*clf.coef_)[predicted_cls-1][:,:no_feature]
+print("-"*50)
+
+# for test_point_index = 1 we get predicted class as 7 as from predicted probabilities below 7th position getting higest probability of 63.73 % and actuall is also same.
+Predicted Class : [7]
+Predicted Class Probabilities: [[0.0691 0.0868 0.0232 0.0907 0.0464 0.0363 0.6373 0.0062 0.0042]]
+Actual Class : 7
+```
+
+Second model : Logistic Regression
+
+With Class balancing
+
+Hyper paramter tuning
+
+```python
+alpha = [10 ** x for x in range(-6, 3)]
+cv_log_error_array = []
+for i in alpha:
+    print("for alpha =", i)
+    clf = SGDClassifier(class_weight='balanced', alpha=i, penalty='l2', loss='log', random_state=42)
+    clf.fit(train_x_onehotCoding, train_y)
+    sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+    sig_clf.fit(train_x_onehotCoding, train_y)
+    sig_clf_probs = sig_clf.predict_proba(cv_x_onehotCoding)
+    cv_log_error_array.append(log_loss(cv_y, sig_clf_probs, labels=clf.classes_, eps=1e-15))
+    # to avoid rounding error while multiplying probabilites we use log-probability estimates
+    print("Log Loss :",log_loss(cv_y, sig_clf_probs)) 
+
+fig, ax = plt.subplots()
+ax.plot(alpha, cv_log_error_array,c='g')
+for i, txt in enumerate(np.round(cv_log_error_array,3)):
+    ax.annotate((alpha[i],str(txt)), (alpha[i],cv_log_error_array[i]))
+plt.grid()
+plt.title("Cross Validation Error for each alpha")
+plt.xlabel("Alpha i's")
+plt.ylabel("Error measure")
+plt.show()
+
+
+best_alpha = np.argmin(cv_log_error_array)
+clf = SGDClassifier(class_weight='balanced', alpha=alpha[best_alpha], penalty='l2', loss='log', random_state=42)
+clf.fit(train_x_onehotCoding, train_y)
+sig_clf = CalibratedClassifierCV(clf, method="sigmoid")
+sig_clf.fit(train_x_onehotCoding, train_y)
+
+predict_y = sig_clf.predict_proba(train_x_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The train log loss is:",log_loss(y_train, predict_y, labels=clf.classes_, eps=1e-15))
+predict_y = sig_clf.predict_proba(cv_x_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The cross validation log loss is:",log_loss(y_cv, predict_y, labels=clf.classes_, eps=1e-15))
+predict_y = sig_clf.predict_proba(test_x_onehotCoding)
+print('For values of best alpha = ', alpha[best_alpha], "The test log loss is:",log_loss(y_test, predict_y, labels=clf.classes_, eps=1e-15))
+
+for alpha = 1e-06
+Log Loss : 1.4554353198842396
+for alpha = 1e-05
+Log Loss : 1.4602144866667575
+for alpha = 0.0001
+Log Loss : 1.358469527280309
+for alpha = 0.001
+Log Loss : 1.217324457704446
+for alpha = 0.01
+Log Loss : 1.3437838209291793
+for alpha = 0.1
+Log Loss : 1.5457557924182381
+for alpha = 1
+Log Loss : 1.706360520395438
+for alpha = 10
+Log Loss : 1.7261917214695601
+for alpha = 100
+Log Loss : 1.7282505302427342
+```
+
+![Screen Shot 2021-10-23 at 7 46 10 PM](https://user-images.githubusercontent.com/90976062/138560224-f57d98f9-e28c-4bd3-894b-4df4713c1d48.png)
+
+Testing with best hyperparameter
+
+```python
+clf = SGDClassifier(class_weight='balanced', alpha=alpha[best_alpha], penalty='l2', loss='log', random_state=42)
+predict_and_plot_confusion_matrix(train_x_onehotCoding, train_y, cv_x_onehotCoding, cv_y, clf)
+
+Log loss : 1.217324457704446
+Number of mis-classified points : 0.38345864661654133
+```
+
+Now lets test our model to get predicted output using test data 
+
+```python
+clf = SGDClassifier(class_weight='balanced', alpha=alpha[best_alpha], penalty='l2', loss='log', random_state=42)
+clf.fit(train_x_onehotCoding,train_y)
+test_point_index = 1
+no_feature = 500
+predicted_cls = sig_clf.predict(test_x_onehotCoding[test_point_index])
+print("Predicted Class :", predicted_cls[0])
+print("Predicted Class Probabilities:", np.round(sig_clf.predict_proba(test_x_onehotCoding[test_point_index]),4))
+print("Actual Class :", test_y[test_point_index])
+indices = np.argsort(-1*abs(clf.coef_))[predicted_cls-1][:,:no_feature]
+print("-"*50)
+
+# for test_point_index = 1 we get predicted class as 7 as from predicted probabilities below 7th position getting higest probability of 78.72 % and actuall is also same.
+Predicted Class : 7
+Predicted Class Probabilities: [[0.0045 0.1905 0.0012 0.0012 0.0047 0.0014 0.7872 0.0076 0.0017]]
+Actual Class : 7
+```
+
+
+
+
+
+
+
+
+
