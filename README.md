@@ -1256,6 +1256,32 @@ Predicted Class Probabilities: [[0.0045 0.1905 0.0012 0.0012 0.0047 0.0014 0.787
 Actual Class : 7
 ```
 
+Now lets compare outputs of from both models and pick model with best output 
+
+NAIVE BAYES 
+
+TRAIN DATA  LOG LOSS - 0.92
+
+CV LOG LOSS -  1.25
+
+TEST DATA LOG LOSS - 1.29
+
+% AGE NO OF MISCLASSIFIED POINTS - 41.54%
+
+
+LOGISTIC REGRESSION 
+
+TRAIN DATA LOG LOSS - 0.615
+
+CV DATA LOG LOSS - 1.217
+
+TEST DATA LOG LOSS - 1.104
+
+% AGE NO OF MISCLASSIFIED POINTS  - 38.34%
+
+
+From above we can clearly see logistic regression performing better than NB so will pick Logistic regression .
+
 
 
 
