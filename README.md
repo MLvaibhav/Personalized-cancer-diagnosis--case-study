@@ -1060,6 +1060,9 @@ We are going to apply few models on same dataset and will choose the one with le
 
 First model : Naive Bayes model 
 
+We use here caliberated classifier cv for NB model as we need probabilistic outcome and this takes our outcome from model (yi) and converts it into prob output as we 
+need probability of a class similar way we use SGD classifier in case of LR model for same purpose
+
 Hyper parameter tuning
 
 ```python
