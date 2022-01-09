@@ -448,116 +448,7 @@ Recall matrix
 With use of random model wequantify how bad a MODEL can be 
 
 Univariate Analysis - picking each feature and analyse its impact on model
-```python
-# code for response coding with Laplace smoothing.
-# alpha : used for laplace smoothing
-# feature: ['gene', 'variation']
-# df: ['train_df', 'test_df', 'cv_df']
-# algorithm
-# ----------
-# Consider all unique values and the number of occurances of given feature in train data dataframe
-# build a vector (1*9) , the first element = (number of times it occured in class1 + 10*alpha / number of time it occurred in total data+90*alpha)
-# gv_dict is like a look up table, for every gene it store a (1*9) representation of it
-# for a value of feature in df:
-# if it is in train data:
-# we add the vector that was stored in 'gv_dict' look up table to 'gv_fea'
-# if it is not there is train:
-# we add [1/9, 1/9, 1/9, 1/9,1/9, 1/9, 1/9, 1/9, 1/9] to 'gv_fea'
-# return 'gv_fea'
-# ----------------------
 
-# get_gv_fea_dict: Get Gene varaition Feature Dict
-def get_gv_fea_dict(alpha, feature, df):
-    # value_count: it contains a dict like
-    # print(train_df['Gene'].value_counts())
-    # output:
-    #        {BRCA1      174
-    #         TP53       106
-    #         EGFR        86
-    #         BRCA2       75
-    #         PTEN        69
-    #         KIT         61
-    #         BRAF        60
-    #         ERBB2       47
-    #         PDGFRA      46
-    #         ...}
-    # print(train_df['Variation'].value_counts())
-    # output:
-    # {
-    # Truncating_Mutations                     63
-    # Deletion                                 43
-    # Amplification                            43
-    # Fusions                                  22
-    # Overexpression                            3
-    # E17K                                      3
-    # Q61L                                      3
-    # S222D                                     2
-    # P130S                                     2
-    # ...
-    # }
-    value_count = train_df[feature].value_counts()
-    
-    # gv_dict : Gene Variation Dict, which contains the probability array for each gene/variation
-    gv_dict = dict()
-    
-    # denominator will contain the number of time that particular feature occured in whole data
-    for i, denominator in value_count.items():
-        # vec will contain (p(yi==1/Gi) probability of gene/variation belongs to perticular class
-        # vec is 9 diamensional vector
-        vec = []
-        for k in range(1,10):
-            # print(train_df.loc[(train_df['Class']==1) & (train_df['Gene']=='BRCA1')])
-            #         ID   Gene             Variation  Class  
-            # 2470  2470  BRCA1                S1715C      1   
-            # 2486  2486  BRCA1                S1841R      1   
-            # 2614  2614  BRCA1                   M1R      1   
-            # 2432  2432  BRCA1                L1657P      1   
-            # 2567  2567  BRCA1                T1685A      1   
-            # 2583  2583  BRCA1                E1660G      1   
-            # 2634  2634  BRCA1                W1718L      1   
-            # cls_cnt.shape[0] will return the number of rows
-
-            cls_cnt = train_df.loc[(train_df['Class']==k) & (train_df[feature]==i)]
-            
-            # cls_cnt.shape[0](numerator) will contain the number of time that particular feature occured in whole data
-            vec.append((cls_cnt.shape[0] + alpha*10)/ (denominator + 90*alpha))
-
-        # we are adding the gene/variation to the dict as key and vec as value
-        gv_dict[i]=vec
-    return gv_dict
-
-# Get Gene variation feature
-def get_gv_feature(alpha, feature, df):
-    # print(gv_dict)
-    #     {'BRCA1': [0.20075757575757575, 0.03787878787878788, 0.068181818181818177, 0.13636363636363635, 0.25, 0.19318181818181818, 0.03787878787878788, 0.03787878787878788, 0.03787878787878788], 
-    #      'TP53': [0.32142857142857145, 0.061224489795918366, 0.061224489795918366, 0.27040816326530615, 0.061224489795918366, 0.066326530612244902, 0.051020408163265307, 0.051020408163265307, 0.056122448979591837], 
-    #      'EGFR': [0.056818181818181816, 0.21590909090909091, 0.0625, 0.068181818181818177, 0.068181818181818177, 0.0625, 0.34659090909090912, 0.0625, 0.056818181818181816], 
-    #      'BRCA2': [0.13333333333333333, 0.060606060606060608, 0.060606060606060608, 0.078787878787878782, 0.1393939393939394, 0.34545454545454546, 0.060606060606060608, 0.060606060606060608, 0.060606060606060608], 
-    #      'PTEN': [0.069182389937106917, 0.062893081761006289, 0.069182389937106917, 0.46540880503144655, 0.075471698113207544, 0.062893081761006289, 0.069182389937106917, 0.062893081761006289, 0.062893081761006289], 
-    #      'KIT': [0.066225165562913912, 0.25165562913907286, 0.072847682119205295, 0.072847682119205295, 0.066225165562913912, 0.066225165562913912, 0.27152317880794702, 0.066225165562913912, 0.066225165562913912], 
-    #      'BRAF': [0.066666666666666666, 0.17999999999999999, 0.073333333333333334, 0.073333333333333334, 0.093333333333333338, 0.080000000000000002, 0.29999999999999999, 0.066666666666666666, 0.066666666666666666],
-    #      ...
-    #     }
-    gv_dict = get_gv_fea_dict(alpha, feature, df)
-    # value_count is similar in get_gv_fea_dict
-    value_count = train_df[feature].value_counts()
-    
-    # gv_fea: Gene_variation feature, it will contain the feature for each feature value in the data
-    gv_fea = []
-    # for every feature values in the given data frame we will check if it is there in the train data then we will add the feature to gv_fea
-    # if not we will add [1/9,1/9,1/9,1/9,1/9,1/9,1/9,1/9,1/9] to gv_fea
-    for index, row in df.iterrows():
-        if row[feature] in dict(value_count).keys():
-            gv_fea.append(gv_dict[row[feature]])
-        else:
-            gv_fea.append([1/9,1/9,1/9,1/9,1/9,1/9,1/9,1/9,1/9])
-#             gv_fea.append([-1,-1,-1,-1,-1,-1,-1,-1,-1])
-    return gv_fea
-```
-
-when we caculate the probability of a feature belongs to any particular class, we apply laplace smoothing
-
-(numerator + 10\*alpha) / (denominator + 90\*alpha)
 
 Univariate Analysis on Gene Feature
 
@@ -613,20 +504,6 @@ We will choose the appropriate featurization based on the ML model we use. For t
 
 for Logistic regression while response coding is better for Random Forests.
 
-```python
-#response-coding of the Gene feature
-# alpha is used for laplace smoothing
-alpha = 1
-# train gene feature
-train_gene_feature_responseCoding = np.array(get_gv_feature(alpha, "Gene", train_df))
-# test gene feature
-test_gene_feature_responseCoding = np.array(get_gv_feature(alpha, "Gene", test_df))
-# cross validation gene feature
-cv_gene_feature_responseCoding = np.array(get_gv_feature(alpha, "Gene", cv_df))
-print("train_gene_feature_responseCoding is converted feature using respone coding method. The shape of gene feature:", train_gene_feature_responseCoding.shape)
-
-train_gene_feature_responseCoding is converted feature using respone coding method. The shape of gene feature: (2124, 9)
-```
 
 ```python
 # one-hot encoding of Gene feature.
@@ -763,19 +640,6 @@ plt.show()
 
 featurize this Variation feature
 
-```python
-# alpha is used for laplace smoothing
-alpha = 1
-# train gene feature
-train_variation_feature_responseCoding = np.array(get_gv_feature(alpha, "Variation", train_df))
-# test gene feature
-test_variation_feature_responseCoding = np.array(get_gv_feature(alpha, "Variation", test_df))
-# cross validation gene feature
-cv_variation_feature_responseCoding = np.array(get_gv_feature(alpha, "Variation", cv_df))
-print("train_variation_feature_responseCoding is a converted feature using the response coding method. The shape of Variation feature:", train_variation_feature_responseCoding.shape)
-
-train_variation_feature_responseCoding is a converted feature using the response coding method. The shape of Variation feature: (2124, 9)
-```
 ```python
 # one-hot encoding of variation feature.
 variation_vectorizer = CountVectorizer()
